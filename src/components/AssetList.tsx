@@ -4,6 +4,8 @@ import {
   Asset,
   ASSET_LIST_STATUS_RETIRED_STOLEN,
   ASSET_LIST_WARRANTY_EXPIRING_30D,
+  ASSET_LIST_FIELD_EMPTY,
+  ASSET_LIST_MACBOOK_ANY,
   AssetListNavigateFilters,
   Employee,
 } from '../types';
@@ -28,6 +30,10 @@ import BulkSelectionBar from './BulkSelectionBar';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { iconSize } from '../lib/icons';
+import { PageHeader } from './ui/DetailTabs';
+import EmptyState from './ui/EmptyState';
+import { useConfirm } from './ui/ConfirmProvider';
+import { toast } from '../lib/toast';
 
 function assetMatchesWarrantyFilter(asset: Asset, filterWarranty: string): boolean {
   if (filterWarranty === 'all') return true;
@@ -41,7 +47,7 @@ function assetMatchesWarrantyFilter(asset: Asset, filterWarranty: string): boole
 }
 
 /** Select value for assets with no RAM / storage / chip recorded */
-const ASSET_SPEC_EMPTY = '__empty__';
+const ASSET_SPEC_EMPTY = ASSET_LIST_FIELD_EMPTY;
 const MS_YEAR_APPROX = 365.25 * 86_400_000;
 
 function assetMatchesPurchaseFilter(asset: Asset, filterPurchase: string): boolean {
@@ -57,16 +63,21 @@ function assetMatchesPurchaseFilter(asset: Asset, filterPurchase: string): boole
   return true;
 }
 
-function matchesSpecFilter(field: string | undefined, filterVal: string): boolean {
+function matchesTextField(field: string | undefined, filterVal: string): boolean {
   if (filterVal === 'all') return true;
   const v = (field || '').trim();
-  if (filterVal === ASSET_SPEC_EMPTY) return v === '';
+  if (filterVal === ASSET_LIST_FIELD_EMPTY) return v === '';
   return v === filterVal;
+}
+
+function matchesSpecFilter(field: string | undefined, filterVal: string): boolean {
+  return matchesTextField(field, filterVal);
 }
 
 function assetMatchesMacBookLineFilter(asset: Asset, filterMacBookLine: string): boolean {
   if (filterMacBookLine === 'all') return true;
   const haystack = `${asset.name || ''} ${asset.model || ''}`.toLowerCase();
+  if (filterMacBookLine === ASSET_LIST_MACBOOK_ANY) return haystack.includes('macbook');
   if (filterMacBookLine === 'air') return haystack.includes('macbook air');
   if (filterMacBookLine === 'pro') return haystack.includes('macbook pro');
   return true;
@@ -112,6 +123,7 @@ export default function AssetList({
   searchQuery: string;
   onSearchChange: (value: string) => void;
 }) {
+  const confirm = useConfirm();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filterType, setFilterType] = useState<string>('all');
@@ -182,8 +194,8 @@ export default function AssetList({
         (filterStatus === ASSET_LIST_STATUS_RETIRED_STOLEN
           ? asset.status === 'Retired' || asset.status === 'Stolen'
           : asset.status === filterStatus);
-      const matchesLocation = filterLocation === 'all' || asset.location === filterLocation;
-      const matchesModel = filterModel === 'all' || asset.model === filterModel;
+      const matchesLocation = matchesTextField(asset.location, filterLocation);
+      const matchesModel = matchesTextField(asset.model, filterModel);
       const matchesWarranty = assetMatchesWarrantyFilter(asset, filterWarranty);
       const matchesAssignment =
         filterAssignment === 'all' ||
@@ -257,12 +269,19 @@ export default function AssetList({
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     const ids = [...selectedIds].filter((id) => filteredIdSet.has(id));
     if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} asset(s)? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete ${ids.length} asset${ids.length === 1 ? '' : 's'}?`,
+      description: 'This permanently removes the selected assets and their assignment history. This cannot be undone.',
+      confirmLabel: 'Delete assets',
+      variant: 'danger',
+    });
+    if (!ok) return;
     deleteAssets(ids);
     clearSelection();
+    toast(`Deleted ${ids.length} asset${ids.length === 1 ? '' : 's'}.`);
   };
 
   const locations = Array.from(new Set(assets.map((a) => a.location))).filter(Boolean);
@@ -307,39 +326,41 @@ export default function AssetList({
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [assets]);
 
-  const handleDelete = (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this asset?')) return;
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: 'Delete this asset?',
+      description: 'The asset and its assignment records will be permanently removed.',
+      confirmLabel: 'Delete asset',
+      variant: 'danger',
+    });
+    if (!ok) return;
     deleteAsset(id);
+    toast('Asset deleted.');
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Assets</h2>
-          <p className="text-gray-500 text-sm">
-            Manage your hardware inventory. Use the top bar to search by name, serial, or assignee.
-          </p>
-        </div>
-        <div className="icon-toolbar">
-            <button
-              type="button"
-              onClick={() => setImportExcelOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-white border border-gray-200 text-gray-800 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
-            >
-              <FileSpreadsheet className={iconSize.md} />
-              Import Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => onEdit({} as Asset)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
-            >
-              <Plus className={iconSize.md} />
-              Add Asset
-            </button>
-          </div>
-      </div>
+      <PageHeader
+        title="Assets"
+        description="Manage hardware inventory, assignments, and lifecycle. Search by name, serial, or assignee in the top bar."
+      >
+        <button
+          type="button"
+          onClick={() => setImportExcelOpen(true)}
+          className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-white border border-gray-200 text-gray-800 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+        >
+          <FileSpreadsheet className={iconSize.md} />
+          Import Excel
+        </button>
+        <button
+          type="button"
+          onClick={() => onEdit({} as Asset)}
+          className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+        >
+          <Plus className={iconSize.md} />
+          Add Asset
+        </button>
+      </PageHeader>
 
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 custom-scrollbar border-b border-gray-100">
         <button
@@ -418,6 +439,9 @@ export default function AssetList({
                   {loc}
                 </option>
               ))}
+              {assets.some((a) => !(a.location || '').trim()) && (
+                <option value={ASSET_LIST_FIELD_EMPTY}>Location not set</option>
+              )}
             </select>
             <select
               value={filterModel}
@@ -430,6 +454,9 @@ export default function AssetList({
                   {mod}
                 </option>
               ))}
+              {assets.some((a) => !(a.model || '').trim()) && (
+                <option value={ASSET_LIST_FIELD_EMPTY}>Model not set</option>
+              )}
             </select>
             <select
               value={filterMacBookLine}
@@ -438,6 +465,7 @@ export default function AssetList({
               aria-label="Filter by MacBook line"
             >
               <option value="all">All MacBook lines</option>
+              <option value={ASSET_LIST_MACBOOK_ANY}>Any MacBook</option>
               <option value="air">MacBook Air</option>
               <option value="pro">MacBook Pro</option>
             </select>
@@ -883,11 +911,55 @@ export default function AssetList({
       )}
 
       {filteredAssets.length === 0 && (
-        <div className="text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
-          <Package className={cn(iconSize.display, "mx-auto text-gray-300 mb-4")} />
-          <h3 className="text-lg font-medium text-gray-900">No assets found</h3>
-          <p className="text-gray-500">Try adjusting your search or filters</p>
-        </div>
+        <EmptyState
+          icon={Package}
+          title={assets.length === 0 ? 'No assets in inventory yet' : 'No assets match your filters'}
+          description={
+            assets.length === 0
+              ? 'Import your spreadsheet or add assets manually to start tracking hardware.'
+              : 'Try clearing filters or adjusting your search in the top bar.'
+          }
+        >
+          {assets.length === 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setImportExcelOpen(true)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
+              >
+                Import Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => onEdit({} as Asset)}
+                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
+                Add first asset
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                onSearchChange('');
+                setFilterType('all');
+                setFilterStatus('all');
+                setFilterLocation('all');
+                setFilterModel('all');
+                setFilterMacBookLine('all');
+                setFilterWarranty('all');
+                setFilterAssignment('all');
+                setFilterRam('all');
+                setFilterStorage('all');
+                setFilterChip('all');
+                setFilterPurchase('all');
+              }}
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Clear all filters
+            </button>
+          )}
+        </EmptyState>
       )}
 
       <AssetExcelImportDialog open={importExcelOpen} onClose={() => setImportExcelOpen(false)} />

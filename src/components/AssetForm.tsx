@@ -13,12 +13,13 @@ import {
   reconcileAssetAssignmentState,
   getState,
   subscribe,
-  PERFORMED_BY,
 } from '../data/localStore';
+import { getPerformedBy } from '../data/settings';
 import { normalizeAssetTypeInput, cn } from '../lib/utils';
 import { timestampFromDateInput, todayDateInputValue } from '../lib/assignmentDates';
 import { X, Save, UserPlus, Search, Package, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toast } from '../lib/toast';
 
 const assetSchema = z.object({
   name: z.string(),
@@ -76,7 +77,7 @@ export default function AssetForm({
       (e.employeeNumber || '').toLowerCase().includes(assignSearch.toLowerCase())
   );
 
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm<AssetFormData>({
+  const { register, handleSubmit, formState: { isSubmitting, errors } } = useForm<AssetFormData>({
     resolver: zodResolver(assetSchema),
     defaultValues: {
       name: asset.name || '',
@@ -146,7 +147,7 @@ export default function AssetForm({
           type: 'StatusChange',
           description: `Status changed from ${prevStatus} to ${status}`,
           timestamp: now,
-          performedBy: PERFORMED_BY,
+          performedBy: getPerformedBy(),
         });
       }
     } else {
@@ -163,7 +164,7 @@ export default function AssetForm({
         type: 'Creation',
         description: `Asset created with Device ID: ${deviceId}`,
         timestamp: now,
-        performedBy: PERFORMED_BY,
+        performedBy: getPerformedBy(),
       });
 
       if (assignEmployeeId) {
@@ -193,6 +194,7 @@ export default function AssetForm({
         });
       }
     }
+    toast(isEditing ? 'Asset updated.' : 'Asset created.');
     onClose();
   };
 
@@ -303,9 +305,15 @@ export default function AssetForm({
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Serial Number</label>
               <input
                 {...register('serialNumber')}
-                className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all font-mono"
+                className={cn(
+                  'w-full px-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all font-mono',
+                  errors.serialNumber && 'ring-2 ring-rose-300'
+                )}
                 placeholder="SN-123456789"
               />
+              {errors.serialNumber && (
+                <p className="text-xs text-rose-600">{errors.serialNumber.message}</p>
+              )}
             </div>
 
             <div className="space-y-1">

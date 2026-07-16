@@ -15,6 +15,8 @@ import { X, Save, Search, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
+import { useConfirm } from './ui/ConfirmProvider';
+import { toast } from '../lib/toast';
 
 export default function AssignmentEditForm({
   assignment,
@@ -25,6 +27,7 @@ export default function AssignmentEditForm({
   asset: Asset;
   onClose: () => void;
 }) {
+  const confirm = useConfirm();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(assignment.employeeId);
   const [transferDate, setTransferDate] = useState(toDateInputValue(assignment.assignedAt));
@@ -149,20 +152,21 @@ export default function AssignmentEditForm({
       }
 
       onClose();
+      toast('Assignment updated.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const assigneeName = employees.find((e) => e.id === assignment.employeeId)?.name || 'employee';
-    if (
-      !window.confirm(
-        `Delete this assignment for ${assigneeName}? The checkout state for this asset will be updated from any remaining rows.`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete assignment?',
+      description: `Remove the assignment for ${assigneeName}. The asset checkout state will update from any remaining rows.`,
+      confirmLabel: 'Delete assignment',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setIsSubmitting(true);
     try {
       const removed = deleteAssignment(assignment.id);
@@ -176,6 +180,7 @@ export default function AssignmentEditForm({
           employeeId: removed.employeeId,
           timestamp: Timestamp.now(),
         });
+        toast('Assignment deleted.');
       }
       onClose();
     } finally {

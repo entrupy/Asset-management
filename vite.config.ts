@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            if (id.includes('node_modules/@supabase')) return 'supabase';
             if (id.includes('node_modules/xlsx')) return 'xlsx';
             if (id.includes('node_modules/motion')) return 'motion';
             if (

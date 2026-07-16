@@ -8,7 +8,7 @@ import {
   upsertEmployeeByEmployeeNumber,
 } from '../data/localStore';
 import { Timestamp } from '../lib/timestamp';
-import { Employee, EmployeeType, EmploymentStatus, Asset } from '../types';
+import { Employee, EmployeeType, EmploymentStatus, Asset, EmployeeListNavigateFilters } from '../types';
 import {
   Users,
   Plus,
@@ -29,6 +29,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { cn } from '../lib/utils';
 import { iconSize } from '../lib/icons';
+import { PageHeader } from './ui/DetailTabs';
+import EmptyState from './ui/EmptyState';
+import { useConfirm } from './ui/ConfirmProvider';
+import { toast } from '../lib/toast';
 
 const DEPT_EMPTY = '__empty__';
 const MS_DAY = 86_400_000;
@@ -63,10 +67,15 @@ function resolveEmployeeType(emp: Employee): EmployeeType {
 export default function EmployeeList({
   onView,
   searchQuery,
+  navigateFilters,
+  onNavigateFiltersApplied,
 }: {
   onView: (employee: Employee) => void;
   searchQuery: string;
+  navigateFilters?: { token: number; filters: EmployeeListNavigateFilters } | null;
+  onNavigateFiltersApplied?: () => void;
 }) {
+  const confirm = useConfirm();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -104,6 +113,14 @@ export default function EmployeeList({
     sync();
     return subscribe(sync);
   }, []);
+
+  useEffect(() => {
+    if (!navigateFilters) return;
+    const { filters } = navigateFilters;
+    setFilterStatus(filters.filterStatus);
+    setFilterHardware(filters.filterHardware);
+    onNavigateFiltersApplied?.();
+  }, [navigateFilters, onNavigateFiltersApplied]);
 
   useEffect(() => {
     if (editingEmployee) {
@@ -157,6 +174,7 @@ export default function EmployeeList({
     }
     setIsFormOpen(false);
     setEditingEmployee(null);
+    toast(editingEmployee ? 'Employee updated.' : 'Employee added.');
   };
 
   const filteredEmployees = useMemo(() => {
@@ -241,17 +259,20 @@ export default function EmployeeList({
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     const ids = [...selectedIds].filter((id) => filteredIdSet.has(id));
     if (ids.length === 0) return;
-    if (
-      !window.confirm(
-        `Delete ${ids.length} employee(s)? Their asset assignment links will remain on assets until reassigned.`
-      )
-    )
-      return;
+    const ok = await confirm({
+      title: `Delete ${ids.length} employee${ids.length === 1 ? '' : 's'}?`,
+      description:
+        'Employees will be removed from the directory. Asset assignment links stay on assets until you reassign them.',
+      confirmLabel: 'Delete employees',
+      variant: 'danger',
+    });
+    if (!ok) return;
     deleteEmployees(ids);
     clearSelection();
+    toast(`Deleted ${ids.length} employee${ids.length === 1 ? '' : 's'}.`);
   };
 
   const locations = Array.from(new Set(employees.map((e) => e.location))).filter(Boolean);
@@ -263,42 +284,45 @@ export default function EmployeeList({
   const departments = Array.from(departmentSet).sort((a, b) => a.localeCompare(b));
   const hasDeptMissing = employees.some((e) => !(e.department || '').trim());
 
-  const handleDelete = (id: string) => {
-    if (!window.confirm('Are you sure? This will not remove their asset assignments.')) return;
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: 'Delete this employee?',
+      description:
+        'The employee record will be removed. Their name may still appear on past asset assignments until reassigned.',
+      confirmLabel: 'Delete employee',
+      variant: 'danger',
+    });
+    if (!ok) return;
     deleteEmployee(id);
+    toast('Employee deleted.');
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Employees</h2>
-          <p className="text-gray-500 text-sm">
-            Manage staff and departments. Search from the top bar by name, email, employee ID, or department.
-          </p>
-        </div>
-        <div className="icon-toolbar">
-            <button
-              type="button"
-              onClick={() => setImportExcelOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-white border border-gray-200 text-gray-800 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
-            >
-              <FileSpreadsheet className={iconSize.md} />
-              Import Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsFormOpen(true);
-                setEditingEmployee(null);
-              }}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
-            >
-              <Plus className={iconSize.md} />
-              Add Employee
-            </button>
-          </div>
-      </div>
+      <PageHeader
+        title="Employees"
+        description="Team directory with departments, assignment history, and hardware allocation."
+      >
+        <button
+          type="button"
+          onClick={() => setImportExcelOpen(true)}
+          className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-white border border-gray-200 text-gray-800 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+        >
+          <FileSpreadsheet className={iconSize.md} />
+          Import Excel
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setIsFormOpen(true);
+            setEditingEmployee(null);
+          }}
+          className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+        >
+          <Plus className={iconSize.md} />
+          Add Employee
+        </button>
+      </PageHeader>
 
       <div className="flex flex-col gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
@@ -638,6 +662,56 @@ export default function EmployeeList({
             ))}
           </AnimatePresence>
         </div>
+      )}
+
+      {filteredEmployees.length === 0 && (
+        <EmptyState
+          icon={Users}
+          title={employees.length === 0 ? 'No employees yet' : 'No employees match your filters'}
+          description={
+            employees.length === 0
+              ? 'Add team members manually or import from Excel to link assets to people.'
+              : 'Try clearing filters or searching by name, email, or employee ID.'
+          }
+        >
+          {employees.length === 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setImportExcelOpen(true)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
+              >
+                Import Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingEmployee(null);
+                  setIsFormOpen(true);
+                }}
+                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
+                Add first employee
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterStatus('all');
+                setFilterLocation('all');
+                setFilterEmployeeType('all');
+                setFilterDepartment('all');
+                setFilterEmail('all');
+                setFilterJoined('all');
+                setFilterHardware('all');
+              }}
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Clear all filters
+            </button>
+          )}
+        </EmptyState>
       )}
 
       <EmployeeExcelImportDialog open={importExcelOpen} onClose={() => setImportExcelOpen(false)} />

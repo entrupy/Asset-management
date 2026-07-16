@@ -1,38 +1,48 @@
 import { Timestamp } from '../lib/timestamp';
 import type { ParsedAssetAssignmentImportRow, ParsedAssetImportRow } from '../lib/assetExcelImport';
 import type { Asset, Assignment, Employee, EmployeeType, EmploymentStatus, HistoryEvent } from '../types';
+import { isCloudSyncEnabled, type StorageMode } from '../config';
+import {
+  pullCloudSnapshot,
+  pushCloudSnapshot,
+  scheduleCloudSync,
+  setStorageMode,
+} from './cloudSync';
+import { getPerformedBy } from './settings';
+import type { BackupPayload } from '../lib/backup';
 
 const STORAGE_KEY = 'assettrack-it-v1';
 const DEDUP_MIGRATION_KEY = 'assettrack-it-migration-dedup-v2';
 
+/** @deprecated Use getPerformedBy() from settings — kept for existing imports */
 export const PERFORMED_BY = 'Admin';
 
-type AppState = {
+export type WorkspaceData = {
   assets: Asset[];
   employees: Employee[];
   assignments: Assignment[];
   history: HistoryEvent[];
 };
 
-function emptyState(): AppState {
+function emptyState(): WorkspaceData {
   return { assets: [], employees: [], assignments: [], history: [] };
 }
 
-let state: AppState = emptyState();
+let state: WorkspaceData = emptyState();
 const listeners = new Set<() => void>();
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-function serialize(s: AppState): string {
+function serialize(s: WorkspaceData): string {
   return JSON.stringify(s, (_k, v) => {
     if (v instanceof Timestamp) return { __ts: v.toMillis() };
     return v;
   });
 }
 
-function deserialize(json: string): AppState {
+function deserialize(json: string): WorkspaceData {
   return JSON.parse(json, (_k, v) => {
     if (v && typeof v === 'object' && typeof (v as { __ts?: number }).__ts === 'number') {
       const o = v as { __ts: number };
@@ -42,7 +52,7 @@ function deserialize(json: string): AppState {
   });
 }
 
-function load(): void {
+function loadLocal(): void {
   if (typeof localStorage === 'undefined') return;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -52,7 +62,7 @@ function load(): void {
   }
 }
 
-function persist(): void {
+function persistLocalOnly(): void {
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY, serialize(state));
@@ -63,14 +73,77 @@ function persist(): void {
   listeners.forEach((l) => l());
 }
 
-load();
+function persist(): void {
+  persistLocalOnly();
+  scheduleCloudSync(() => getCloudPayload());
+}
+
+function hasInventoryData(): boolean {
+  return state.assets.length > 0 || state.employees.length > 0 || state.assignments.length > 0;
+}
+
+export function replaceState(next: WorkspaceData): void {
+  state = next;
+  persist();
+}
+
+export function getCloudPayload(): unknown {
+  return JSON.parse(serialize(state));
+}
+export function getWorkspaceSnapshot(): WorkspaceData {
+  return {
+    assets: [...state.assets],
+    employees: [...state.employees],
+    assignments: [...state.assignments],
+    history: [...state.history],
+  };
+}
+
+export function restoreFromBackup(payload: BackupPayload): void {
+  state = deserialize(JSON.stringify(payload.data));
+  persist();
+}
+
+let initialized = false;
+
+export async function initializeStore(): Promise<StorageMode> {
+  if (initialized) return isCloudSyncEnabled() ? 'cloud' : 'local';
+  initialized = true;
+
+  loadLocal();
+  runStartupMigrations();
+
+  if (!isCloudSyncEnabled()) {
+    setStorageMode('local');
+    return 'local';
+  }
+
+  try {
+    const remote = await pullCloudSnapshot();
+    if (remote?.payload) {
+      state = deserialize(JSON.stringify(remote.payload));
+      persistLocalOnly();
+      setStorageMode('cloud');
+      return 'cloud';
+    }
+
+    if (hasInventoryData()) {
+      await pushCloudSnapshot(JSON.parse(serialize(state)));
+    }
+    setStorageMode('cloud');
+    return 'cloud';
+  } catch {
+    setStorageMode('local');
+    return 'local';
+  }
+}
 
 export function subscribe(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-export function getState(): Readonly<AppState> {
+export function getState(): Readonly<WorkspaceData> {
   return state;
 }
 
@@ -195,7 +268,15 @@ export function deleteEmployees(ids: readonly string[]): number {
   const before = state.employees.length;
   state.employees = state.employees.filter((e) => !set.has(e.id));
   const removed = before - state.employees.length;
-  if (removed > 0) persist();
+  if (removed > 0) {
+    state.assignments = state.assignments.filter((a) => !set.has(a.employeeId));
+    state.assets = state.assets.map((a) =>
+      a.assignedTo && set.has(a.assignedTo)
+        ? { ...a, assignedTo: undefined, status: 'Inventory' as const, updatedAt: Timestamp.now() }
+        : a
+    );
+    persist();
+  }
   return removed;
 }
 
@@ -443,7 +524,7 @@ export function closeOpenAssignmentsForAsset(assetId: string, returnAt: Timestam
       userId: a.employeeId,
       employeeId: a.employeeId,
       timestamp: returnAt,
-      performedBy: PERFORMED_BY,
+      performedBy: getPerformedBy(),
     });
   }
 }
@@ -491,7 +572,7 @@ export function applyAssetImportRow(
       type: 'Update',
       description: `Asset updated from spreadsheet import (serial ${serial}).`,
       timestamp: now,
-      performedBy: PERFORMED_BY,
+      performedBy: getPerformedBy(),
     });
 
     if (deferToAssignmentsSheet) {
@@ -525,7 +606,7 @@ export function applyAssetImportRow(
     type: 'Creation',
     description: `Asset imported from spreadsheet (serial ${serial}).`,
     timestamp: now,
-    performedBy: PERFORMED_BY,
+    performedBy: getPerformedBy(),
   });
 
   if (deferToAssignmentsSheet) {
@@ -569,7 +650,7 @@ function finishAssetImportAssignment(
         userId: emp.id,
         employeeId: emp.id,
         timestamp: now,
-        performedBy: PERFORMED_BY,
+        performedBy: getPerformedBy(),
       });
     }
   } else if (catalog.status === 'Inventory') {
@@ -649,7 +730,7 @@ export function applyAssetAssignmentImport(rows: ParsedAssetAssignmentImportRow[
       type: 'Update',
       description: 'Assignment history restored from spreadsheet import.',
       timestamp: nowHistory,
-      performedBy: PERFORMED_BY,
+      performedBy: getPerformedBy(),
     });
   }
 
@@ -698,5 +779,3 @@ function runStartupMigrations(): void {
   deduplicateEmployees();
   localStorage.setItem(DEDUP_MIGRATION_KEY, '1');
 }
-
-runStartupMigrations();

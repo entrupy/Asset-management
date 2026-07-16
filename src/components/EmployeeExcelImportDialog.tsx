@@ -3,6 +3,8 @@ import { iconSize } from '../lib/icons';
 import { motion } from 'motion/react';
 import { X, FileSpreadsheet, Download } from 'lucide-react';
 import { upsertEmployeeByEmployeeNumber } from '../data/localStore';
+import { toast } from '../lib/toast';
+import { parseEmployeeExcelBuffer, downloadEmployeeImportTemplate } from '../lib/employeeExcelImport';
 
 export default function EmployeeExcelImportDialog({
   open,
@@ -23,7 +25,7 @@ export default function EmployeeExcelImportDialog({
 
     const lower = file.name.toLowerCase();
     if (!lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
-      setMessage('Please choose an .xlsx or .xls file.');
+      toast('Please choose an .xlsx or .xls file.', 'error');
       setErrors([]);
       return;
     }
@@ -32,7 +34,6 @@ export default function EmployeeExcelImportDialog({
     setMessage(null);
     setErrors([]);
     try {
-      const { parseEmployeeExcelBuffer } = await import('../lib/employeeExcelImport');
       const buf = await file.arrayBuffer();
       const { rows, rowErrors } = parseEmployeeExcelBuffer(buf);
       if (rows.length === 0 && rowErrors.length === 0) {
@@ -46,12 +47,16 @@ export default function EmployeeExcelImportDialog({
         if (isNew) created += 1;
         else updated += 1;
       }
-      setMessage(`Imported ${rows.length} row(s): ${created} new, ${updated} updated.`);
+      const summary = `Imported ${rows.length} row(s): ${created} new, ${updated} updated.`;
+      toast(summary);
       if (rowErrors.length) {
-        setErrors(rowErrors.map((err) => `Row ${err.excelRow}: ${err.message}`));
+        toast(`${rowErrors.length} row(s) skipped — check your spreadsheet.`, 'info');
       }
+      onClose();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not read that file.');
+      const msg = err instanceof Error ? err.message : 'Could not read that file.';
+      setMessage(msg);
+      toast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -98,10 +103,7 @@ export default function EmployeeExcelImportDialog({
           </p>
           <button
             type="button"
-            onClick={async () => {
-              const { downloadEmployeeImportTemplate } = await import('../lib/employeeExcelImport');
-              downloadEmployeeImportTemplate();
-            }}
+            onClick={() => downloadEmployeeImportTemplate()}
             className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:text-indigo-700"
           >
             <Download className={iconSize.sm} />

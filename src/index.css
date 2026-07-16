@@ -51,11 +51,12 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
 }
 
 body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-  @apply antialiased text-slate-900 bg-canvas;
+  @apply antialiased text-slate-900 bg-canvas overflow-x-hidden;
 }
 
 ::selection {
@@ -103,7 +104,7 @@ body {
   }
 
   .icon-section-title {
-    @apply flex flex-wrap items-center gap-1.5 sm:gap-2;
+    @apply flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:gap-2;
   }
 
   .icon-view-toggle {
@@ -112,5 +113,28 @@ body {
 
   .icon-view-toggle button {
     @apply rounded-lg p-1.5 sm:p-2;
+  }
+
+  .skeleton {
+    @apply rounded-xl bg-gray-200/80;
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--color-gray-200) 80%, transparent) 0%,
+      color-mix(in oklab, var(--color-gray-100) 90%, white) 50%,
+      color-mix(in oklab, var(--color-gray-200) 80%, transparent) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }

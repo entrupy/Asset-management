@@ -2,6 +2,7 @@
   "name": "assettrack-it",
   "private": true,
   "version": "1.0.0",
+  "description": "Professional IT asset and employee inventory with team cloud sync and Excel import/export",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -17,6 +18,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@supabase/supabase-js": "^2.110.6",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "clsx": "^2.1.1",

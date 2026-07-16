@@ -3,6 +3,8 @@ import { iconSize } from '../lib/icons';
 import { motion } from 'motion/react';
 import { X, FileSpreadsheet, Download } from 'lucide-react';
 import { applyAssetImportRows } from '../data/localStore';
+import { toast } from '../lib/toast';
+import { parseAssetExcelBuffer, downloadAssetImportTemplate } from '../lib/assetExcelImport';
 
 export default function AssetExcelImportDialog({
   open,
@@ -23,7 +25,7 @@ export default function AssetExcelImportDialog({
 
     const lower = file.name.toLowerCase();
     if (!lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
-      setMessage('Please choose an .xlsx or .xls file.');
+      toast('Please choose an .xlsx or .xls file.', 'error');
       setErrors([]);
       return;
     }
@@ -32,7 +34,6 @@ export default function AssetExcelImportDialog({
     setMessage(null);
     setErrors([]);
     try {
-      const { parseAssetExcelBuffer } = await import('../lib/assetExcelImport');
       const buf = await file.arrayBuffer();
       const { rows, rowErrors, assignmentRows, assignmentRowErrors } = parseAssetExcelBuffer(buf);
       if (rows.length === 0 && assignmentRows.length === 0 && rowErrors.length === 0 && assignmentRowErrors.length === 0) {
@@ -56,10 +57,17 @@ export default function AssetExcelImportDialog({
       if (assignmentsImported > 0) {
         parts.push(`${assignmentsImported} assignment(s) imported`);
       }
-      setMessage(`Imported ${parts.join('; ')}.`);
-      setErrors([...parseErrLines, ...warnings]);
+      const summary = `Imported ${parts.join('; ')}.`;
+      const allNotes = [...parseErrLines, ...warnings];
+      toast(summary);
+      if (allNotes.length > 0) {
+        toast(`${allNotes.length} row(s) had warnings — review your spreadsheet.`, 'info');
+      }
+      onClose();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not read that file.');
+      const msg = err instanceof Error ? err.message : 'Could not read that file.';
+      setMessage(msg);
+      toast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -118,10 +126,7 @@ export default function AssetExcelImportDialog({
           </p>
           <button
             type="button"
-            onClick={async () => {
-              const { downloadAssetImportTemplate } = await import('../lib/assetExcelImport');
-              downloadAssetImportTemplate();
-            }}
+            onClick={() => downloadAssetImportTemplate()}
             className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:text-indigo-700"
           >
             <Download className={iconSize.sm} />

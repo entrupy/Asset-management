@@ -7,12 +7,17 @@ import AssetDetails from './components/AssetDetails';
 import EmployeeList from './components/EmployeeList';
 import EmployeeDetails from './components/EmployeeDetails';
 import AssignmentForm from './components/AssignmentForm';
+import Settings from './components/Settings';
 import ErrorBoundary from './components/ErrorBoundary';
+import ToastHost from './components/ui/ToastHost';
+import { ConfirmProvider } from './components/ui/ConfirmProvider';
 import {
   Asset,
   AssetListNavigateFilters,
   DEFAULT_ASSET_LIST_FILTERS,
   Employee,
+  EmployeeListNavigateFilters,
+  DEFAULT_EMPLOYEE_LIST_FILTERS,
 } from './types';
 
 export default function App() {
@@ -27,6 +32,10 @@ export default function App() {
     token: number;
     filters: AssetListNavigateFilters;
   } | null>(null);
+  const [employeesNavigate, setEmployeesNavigate] = useState<{
+    token: number;
+    filters: EmployeeListNavigateFilters;
+  } | null>(null);
 
   const openAssetsTab = useCallback((partial?: Partial<AssetListNavigateFilters>) => {
     setActiveTab('assets');
@@ -36,26 +45,46 @@ export default function App() {
     });
   }, []);
 
-  const headerSearch = activeTab === 'employees' ? employeeSearch : assetSearch;
-  const onHeaderSearchChange = activeTab === 'employees' ? setEmployeeSearch : setAssetSearch;
+  const openEmployeesTab = useCallback((partial?: Partial<EmployeeListNavigateFilters>) => {
+    setActiveTab('employees');
+    setEmployeesNavigate({
+      token: Date.now(),
+      filters: { ...DEFAULT_EMPLOYEE_LIST_FILTERS, ...partial },
+    });
+  }, []);
+
+  const headerSearch =
+    activeTab === 'employees' ? employeeSearch : activeTab === 'assets' ? assetSearch : '';
+  const onHeaderSearchChange =
+    activeTab === 'employees'
+      ? setEmployeeSearch
+      : activeTab === 'assets'
+        ? setAssetSearch
+        : () => {};
   const searchPlaceholder =
     activeTab === 'employees'
       ? 'Search people by name, email, or employee ID'
-      : 'Search assets by name, serial, or assignee';
+      : activeTab === 'assets'
+        ? 'Search assets by name, serial, or assignee'
+        : '';
+  const showHeaderSearch = activeTab === 'assets' || activeTab === 'employees';
 
   const clearAssetsNavigate = useCallback(() => setAssetsNavigate(null), []);
+  const clearEmployeesNavigate = useCallback(() => setEmployeesNavigate(null), []);
 
   return (
     <ErrorBoundary>
-      <Layout
+      <ConfirmProvider>
+        <Layout
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         headerSearch={headerSearch}
         onHeaderSearchChange={onHeaderSearchChange}
         searchPlaceholder={searchPlaceholder}
+        showHeaderSearch={showHeaderSearch}
       >
         {activeTab === 'dashboard' && (
-          <Dashboard onOpenAssets={openAssetsTab} onOpenEmployees={() => setActiveTab('employees')} />
+          <Dashboard onOpenAssets={openAssetsTab} onOpenEmployees={openEmployeesTab} />
         )}
         {activeTab === 'assets' && (
           <AssetList
@@ -69,8 +98,14 @@ export default function App() {
           />
         )}
         {activeTab === 'employees' && (
-          <EmployeeList onView={setViewingEmployee} searchQuery={employeeSearch} />
+          <EmployeeList
+            onView={setViewingEmployee}
+            searchQuery={employeeSearch}
+            navigateFilters={employeesNavigate}
+            onNavigateFiltersApplied={clearEmployeesNavigate}
+          />
         )}
+        {activeTab === 'settings' && <Settings />}
 
         {editingAsset && <AssetForm asset={editingAsset} onClose={() => setEditingAsset(null)} />}
 
@@ -85,7 +120,9 @@ export default function App() {
         {assigningAsset && (
           <AssignmentForm asset={assigningAsset} onClose={() => setAssigningAsset(null)} />
         )}
-      </Layout>
+        </Layout>
+        <ToastHost />
+      </ConfirmProvider>
     </ErrorBoundary>
   );
 }

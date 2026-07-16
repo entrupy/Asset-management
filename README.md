@@ -1,51 +1,63 @@
 # AssetTrack IT
 
-Local-first IT asset and employee inventory for hardware fleet tracking, assignments, warranty status, and Excel import/export. All data is stored in the browser (`localStorage`); no backend required.
+Professional IT asset and employee inventory for hardware fleet tracking, assignments, warranty management, and Excel-based import/export.
 
-## Prerequisites
+**Production-ready static SPA** — deploy to Netlify, Vercel, or any static host. Optional **Supabase cloud sync** lets your whole team share one inventory on the same hosted URL.
 
-- Node.js 20+
+## Features
 
-## Local development
+- **Dashboard** — Fleet KPIs, warranty risk, utilization, recent activity
+- **Assets** — Full lifecycle: inventory, assign, return, swap, repair, retire
+- **Employees** — Directory with hardware assignment history
+- **Excel import/export** — Round-trip by serial number (Assets + Assignments sheets)
+- **Bulk operations** — Multi-select delete with filter awareness
+- **Audit history** — Assignment and status events with admin attribution
+- **Settings** — Organization profile, JSON backup/restore, cloud sync controls
+- **Team cloud sync** — Optional Supabase backend (see below)
+
+## Quick start (development)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Data is stored in the browser until Supabase is configured.
 
-## Production build
+## Production deployment
 
-```bash
-npm run build
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for step-by-step hosting instructions.
+
+See **[HANDOVER.md](./HANDOVER.md)** for the operations handover checklist.
+
+### Team shared data (recommended)
+
+Without cloud configuration, **each browser has its own data**. To fix this for production:
+
+1. Create a [Supabase](https://supabase.com) project (free tier works).
+2. Run `supabase/schema.sql` in the SQL editor.
+3. Set environment variables on your host:
+
+```env
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key
+VITE_WORKSPACE_ID=production
 ```
 
-Output is in `dist/`. Preview locally:
+4. Rebuild and redeploy.
 
-```bash
-npm run preview
-```
-
-## Deploy
-
-AssetTrack IT is a static SPA. Deploy the `dist/` folder to any static host (Vercel, Netlify, Cloudflare Pages, S3, nginx, etc.).
-
-- **Vercel** — `vercel.json` included for SPA routing
-- **Netlify** — `netlify.toml` included
-
-If hosting under a sub-path, set `VITE_BASE_PATH` before building (e.g. `VITE_BASE_PATH=/assettrack/`).
+All users on your hosted link will then share the same asset inventory.
 
 ## Environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VITE_BASE_PATH` | No | Base URL path (default `/`) |
+| `VITE_SUPABASE_URL` | For cloud | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | For cloud | Supabase anon key |
+| `VITE_WORKSPACE_ID` | No | Workspace identifier (default `default`) |
 
-## Notes
-
-- Data lives in each user's browser. Clearing site data removes inventory.
-- No sign-in required — open the app and start managing assets.
+Copy `.env.example` to `.env` for local production builds.
 
 ## Scripts
 
@@ -53,6 +65,26 @@ If hosting under a sub-path, set `VITE_BASE_PATH` before building (e.g. `VITE_BA
 |---------|-------------|
 | `npm run dev` | Development server |
 | `npm run build` | Production build → `dist/` |
-| `npm run preview` | Serve production build locally |
-| `npm run lint` | TypeScript check |
+| `npm run preview` | Preview production build |
+| `npm run typecheck` | TypeScript validation |
 | `npm run clean` | Remove `dist/` |
+
+## Data & backups
+
+| Method | Use case |
+|--------|----------|
+| **Supabase cloud** | Live team sync (production) |
+| **JSON backup** | Settings → full snapshot for DR |
+| **Excel export** | Audits, spreadsheet edits, offline sharing |
+
+## Tech stack
+
+- React 19 + TypeScript + Vite 6
+- Tailwind CSS 4
+- react-hook-form + Zod
+- SheetJS (xlsx) for Excel
+- Supabase (optional cloud sync)
+
+## License
+
+Private / internal use — confirm licensing with your organization before external distribution.

@@ -14,6 +14,7 @@ import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import { iconSize } from '../lib/icons';
+import { toast } from '../lib/toast';
 
 type AssignTab = 'assign' | 'return';
 
@@ -79,6 +80,10 @@ export default function AssignmentForm({
         employees.find((emp) => emp.id === selectedEmployeeId)?.name || 'employee';
 
       if (previousEmployeeId) {
+        const openAsgn = findOpenAssignment(asset.id);
+        if (openAsgn) {
+          patchAssignment(openAsgn.id, { returnedAt: transferAt });
+        }
         insertHistory({
           assetId: asset.id,
           type: 'return',
@@ -112,6 +117,7 @@ export default function AssignmentForm({
         timestamp: transferAt,
       });
 
+      toast(previousEmployeeId ? 'Asset reassigned.' : 'Asset assigned.');
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -150,6 +156,7 @@ export default function AssignmentForm({
         timestamp: returnAtTs,
       });
 
+      toast('Asset returned to inventory.');
       onClose();
     } finally {
       setIsSubmitting(false);

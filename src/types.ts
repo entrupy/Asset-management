@@ -9,6 +9,12 @@ export const ASSET_LIST_STATUS_RETIRED_STOLEN = '__retired_stolen__';
 /** Assets list filter: warranty end date within the next 30 days (dashboard “Expiring soon”). */
 export const ASSET_LIST_WARRANTY_EXPIRING_30D = '__warranty_expiring_30d__';
 
+/** Match assets with empty location, model, or other optional text fields. */
+export const ASSET_LIST_FIELD_EMPTY = '__empty__';
+
+/** Match any MacBook in name/model (dashboard MacBook stat tiles). */
+export const ASSET_LIST_MACBOOK_ANY = 'macbook';
+
 export type AssetListNavigateFilters = {
   filterType: string;
   filterStatus: string;
@@ -23,7 +29,7 @@ export type AssetListNavigateFilters = {
   filterChip: string;
   /** all | unset | last_12m | last_3y | older_3y */
   filterPurchase: string;
-  /** all | air | pro — match MacBook Air vs MacBook Pro in name/model text */
+  /** all | air | pro | macbook — match MacBook Air vs MacBook Pro or any MacBook */
   filterMacBookLine: string;
 };
 
@@ -39,6 +45,17 @@ export const DEFAULT_ASSET_LIST_FILTERS: AssetListNavigateFilters = {
   filterChip: 'all',
   filterPurchase: 'all',
   filterMacBookLine: 'all',
+};
+
+export type EmployeeListNavigateFilters = {
+  filterStatus: string;
+  /** all | has_asset | none */
+  filterHardware: string;
+};
+
+export const DEFAULT_EMPLOYEE_LIST_FILTERS: EmployeeListNavigateFilters = {
+  filterStatus: 'all',
+  filterHardware: 'all',
 };
 export type EmploymentStatus = 'Active' | 'Inactive' | 'On Leave';
 export type EmployeeType = 'Regular' | 'Intern' | 'Contract';
