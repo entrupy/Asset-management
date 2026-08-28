@@ -1,0 +1,13 @@
+.git
+.github
+.vscode
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.md
+.DS_Store
+*.log
+docker-compose*.yml
