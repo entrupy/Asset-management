@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+
+reports/
+reports/*.csv
+__pycache__/
+*.pyc
+.venv/
+venv/
